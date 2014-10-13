@@ -431,9 +431,25 @@ class ViberWindow(XWindow):
 
 
 
+class ViberLauncher(threading.Thread):
+    """class description"""
+
+    def __init__(self, viber_path="/opt/viber/Viber"):
+        super(ViberLauncher, self).__init__()
+        self.viber_path = viber_path
+
+
+    def run(self):
+        sp_viber = subprocess.Popen([self.viber_path], stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE)
+        sp_viber.wait()
+
+        gtk.main_quit()
+
+
 if __name__ == "__main__":
 
-    pid = subprocess.Popen(["/opt/viber/Viber"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE)
+    viber_launcher = ViberLauncher()
+    viber_launcher.start()
 
     viber_icons = ViberIcons.Instance()
     temp_icon_path, temp_notif_path = viber_icons.get_temp_icons()
