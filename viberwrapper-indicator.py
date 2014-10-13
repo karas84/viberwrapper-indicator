@@ -426,7 +426,6 @@ class ViberWindow(XWindow):
 
 
     def quit(self, widget, data=None):
-        gtk.main_quit()
         os.system('pkill -9 Viber')
 
 
