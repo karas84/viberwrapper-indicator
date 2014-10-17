@@ -345,8 +345,11 @@ class ViberIconPoller(threading.Thread):
 
         notified = False
         while True:
-            time.sleep(1)
-            n = self.is_notified()
+            try:
+                time.sleep(1)
+                n = self.is_notified()
+            except:
+                n = False
 
             if n and not notified:
                 notified = True
@@ -486,9 +489,10 @@ if __name__ == "__main__":
         gobject.threads_init()
         gtk.main()
 
-    except NoViberWindowFound:
+    except:
 
         os.system('pkill -9 Viber')
+        viber_icons.clean_temp_icons()
         sys.exit(-1)
 
     finally:
