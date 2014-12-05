@@ -217,6 +217,14 @@ class XTools(object):
         return self.display
 
 
+    def create_window_from_id(self, window_id):
+        return self.display.create_resource_object('window', window_id)
+
+
+    def get_client_list(self):
+        return self.root.get_full_property(self.display.intern_atom('_NET_CLIENT_LIST'), Xlib.X.AnyPropertyType).value
+
+
     def get_mouse_location(self):
         data = self.root.query_pointer()._data
         return data["root_x"], data["root_y"]
@@ -299,6 +307,16 @@ class XWindow(object):
         self.click(button)
 
 
+    def close(self):
+        _NET_CLOSE_WINDOW = self.XTools.get_display().intern_atom("_NET_CLOSE_WINDOW")
+
+        close_message = Xlib.protocol.event.ClientMessage(window=self.window, client_type=_NET_CLOSE_WINDOW, data=(32,[0,0,0,0,0]))
+        mask = (X.SubstructureRedirectMask | X.SubstructureNotifyMask)
+
+        self.XTools.Instance().get_root().send_event(close_message, event_mask=mask)
+        self.XTools.get_display().flush()
+
+
     def hide(self):
         Xlib.protocol.request.UnmapWindow(display=self.XTools.get_display().display, window=self.window.id)
         self.XTools.get_display().sync()
@@ -369,6 +387,31 @@ class ViberIconPoller(threading.Thread):
         return False
 
 
+class ViberChatWindow(XWindow):
+    """class description"""
+
+    @staticmethod
+    def get_viber_chat():
+        window = None
+
+        windowIDs = XTools.Instance().get_client_list()
+        for windowID in windowIDs:
+            window = XTools.Instance().create_window_from_id(windowID)
+            wclass = window.get_wm_class()
+
+            if wclass is None:
+                continue
+
+            if "Viber" in wclass[0] or "Viber" in wclass[1]:
+                break
+
+        return window
+
+
+    def __init__(self):
+        super(ViberChatWindow, self).__init__(ViberChatWindow.get_viber_chat())
+
+
 class NoViberWindowFound(Exception):
         """class description"""
 
@@ -415,13 +458,17 @@ class ViberWindow(XWindow):
         return found_viber_window
 
 
-    def __init__(self):
+    def __init__(self, close_chat=False):
         super(ViberWindow, self).__init__(ViberWindow.poll_viber_window())
 
         if self.window is None:
             raise NoViberWindowFound
 
         self.move(-128, -128)
+
+        if close_chat:
+            self.chat_window = ViberChatWindow()
+            self.chat_window.close()
 
 
     def open(self, widget, data=None):
@@ -457,7 +504,9 @@ if __name__ == "__main__":
     temp_icon_path, temp_notif_path = viber_icons.get_temp_icons()
 
     try:
-        viber_window = ViberWindow()
+        arg_close_chat = len(sys.argv) == 2 and sys.argv[1] == "--close-chat"
+
+        viber_window = ViberWindow(close_chat=arg_close_chat)
 
         ind = appindicator.Indicator("Viber Indicator", "", appindicator.CATEGORY_APPLICATION_STATUS)
         ind.set_status(appindicator.STATUS_ACTIVE)
