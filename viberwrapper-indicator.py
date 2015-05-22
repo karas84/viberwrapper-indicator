@@ -16,6 +16,7 @@ import time
 import subprocess
 import tempfile
 import PIL.Image
+import re
 
 import Xlib
 import Xlib.ext
@@ -289,6 +290,32 @@ class XTools(object):
         self.mousebutton(window, button, is_press=True)
 
 
+    def get_window_by_class_name(self, class_name):
+        window = None
+        for win in self.root.query_tree().children:
+            if win.get_wm_class() is not None:
+                if class_name in win.get_wm_class()[0] or class_name in win.get_wm_class()[1]:
+                    window = self.display.create_resource_object('window', win.id)
+                    break
+
+        return window
+
+
+    def get_client_by_class_name(self, class_name):
+        window = None
+        for win_id in self.get_client_list():
+            try:
+                win = self.create_window_from_id(win_id)
+                wclass = win.get_wm_class()
+                if wclass is not None and (class_name in wclass[0] or class_name in wclass[1]):
+                    window = win
+                    break
+            except:
+                pass
+
+        return window
+
+
 class XWindow(object):
     """class description"""
 
@@ -345,12 +372,27 @@ class XWindow(object):
         return rgbim
 
 
+    def next_event(self, instance=None, atom=None):
+        ev = None
+        while ev is None:
+            ev = self.window.display.next_event()
+
+            if atom is not None:
+                ev = ev if hasattr(ev, 'atom') and ev.atom == atom else None
+
+            if instance is not None:
+                ev = ev if isinstance(ev, instance) else None
+
+        return ev
+
+
 class ViberIconPoller(threading.Thread):
     """class description"""
 
     def __init__(self, xviber_window):
         super(ViberIconPoller, self).__init__()
         self.viber_window = xviber_window
+        self.setDaemon(True)
 
 
     def run(self):
@@ -419,47 +461,50 @@ class NoViberWindowFound(Exception):
             super(NoViberWindowFound, self).__init__("No Viber Window Found")
 
 
+class CompizNotFound(Exception):
+
+    def __init__(self):
+        super(CompizNotFound, self).__init__()
+
+
+class ViberAlreadyRunning(Exception):
+
+    def __init__(self):
+        super(ViberAlreadyRunning, self).__init__()
+
+
 class ViberWindow(XWindow):
     """class description"""
 
-    @staticmethod
-    def get_viber_window():
-        children = XTools.Instance().get_root().query_tree().children
 
-        found_viber_window = None
-        for window in children:
-            try:
-                w_class = window.get_wm_class()
-                if w_class is not None:
-                    if "viber" in w_class[0].lower() or "viber" in w_class[1].lower():
-                        geom = window.get_geometry()._data
-                        if geom['width'] == 22 and geom['height'] == 22:
-                            found_viber_window = window
-            except:
-                pass
-
-        return found_viber_window
-
-
-    @staticmethod
-    def poll_viber_window():
-        found_viber_window = ViberWindow.get_viber_window()
-
-        poll_second_count = 10
-        while poll_second_count > 0:
-            if found_viber_window is not None:
-                break
-
-            time.sleep(1)
-            poll_second_count -= 1
-
-            found_viber_window = ViberWindow.get_viber_window()
-
-        return found_viber_window
+    def find_viber(self):
+        while self.viber_window is None:
+            if self.w_compiz.next_event():
+                self.viber_window = XTools.Instance().get_window_by_class_name('ViberPC')
 
 
     def __init__(self, close_chat=False):
-        super(ViberWindow, self).__init__(ViberWindow.poll_viber_window())
+        self.viber_window = None
+
+        try:
+            self.w_compiz = XWindow(XTools.Instance().get_window_by_class_name('compiz'))
+        except XWindow.WindowIsNone:
+            raise CompizNotFound()
+
+        XTools.Instance().get_root().change_attributes(event_mask=X.SubstructureNotifyMask)
+        self.w_compiz.window.change_attributes(event_mask=X.SubstructureNotifyMask)
+
+        self.thread = threading.Thread(target=self.find_viber)
+        self.thread.setDaemon(True)
+        self.thread.start()
+
+
+        self.viber_launcher = ViberLauncher()
+        self.viber_launcher.start()
+
+        self.thread.join()
+
+        super(ViberWindow, self).__init__(self.viber_window)
 
         if self.window is None:
             raise NoViberWindowFound
@@ -479,6 +524,25 @@ class ViberWindow(XWindow):
         os.system('pkill -9 Viber')
 
 
+class ProcessFinder(object):
+    """class description"""
+
+    def __init__(self, process_path):
+        self.process_path = process_path.strip().replace('\t', ' ')
+        self.re = re.compile(r".* " + re.escape(self.process_path) + r"$")
+
+
+    def find(self):
+        ret = subprocess.Popen(['ps', '-aux'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE)
+        ret.wait()
+        out_stream, err_stream = ret.communicate()
+
+        for line in out_stream.split('\n'):
+            if self.re.match(line):
+                return True
+
+        return False
+
 
 class ViberLauncher(threading.Thread):
     """class description"""
@@ -486,6 +550,16 @@ class ViberLauncher(threading.Thread):
     def __init__(self, viber_path="/opt/viber/Viber"):
         super(ViberLauncher, self).__init__()
         self.viber_path = viber_path
+        self.setDaemon(True)
+
+
+    def start(self):
+        viber_finder = ProcessFinder(self.viber_path)
+
+        if viber_finder.find():
+            raise ViberAlreadyRunning()
+        else:
+            super(ViberLauncher, self).start()
 
 
     def run(self):
@@ -496,10 +570,6 @@ class ViberLauncher(threading.Thread):
 
 
 if __name__ == "__main__":
-
-    viber_launcher = ViberLauncher()
-    viber_launcher.start()
-
     viber_icons = ViberIcons.Instance()
     temp_icon_path, temp_notif_path = viber_icons.get_temp_icons()
 
@@ -537,6 +607,11 @@ if __name__ == "__main__":
 
         gobject.threads_init()
         gtk.main()
+
+    except ViberAlreadyRunning:
+
+        sys.stdout.write("Viber Already Running!\n")
+        sys.stdout.flush()
 
     except:
 
