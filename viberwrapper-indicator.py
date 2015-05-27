@@ -129,8 +129,8 @@ class ViberIcons(object):
             self.temp_icon_normal.flush()
             self.temp_icon_notif.flush()
 
-            self.icon_normal = os.path.abspath(self.temp_icon.name)
-            self.icon_notification = os.path.abspath(self.temp_notif.name)
+            self.icon_normal = os.path.abspath(self.temp_icon_normal.name)
+            self.icon_notification = os.path.abspath(self.temp_icon_notif.name)
 
 
 
@@ -148,8 +148,8 @@ class ViberIcons(object):
 
     def clean_icons(self):
         if self.icon_type == "BUILTIN":
-            self.temp_icon.close()
-            self.temp_notif.close()
+            self.temp_icon_normal.close()
+            self.temp_icon_notif.close()
 
 
 class XTools(object):
