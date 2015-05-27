@@ -17,6 +17,7 @@ import subprocess
 import tempfile
 import PIL.Image
 import re
+import sys
 
 import Xlib
 import Xlib.ext
@@ -25,6 +26,11 @@ from Xlib import X, display, xobject
 
 
 pygtk.require('2.0')
+
+
+def printf(str_format, *args):
+    sys.stdout.write(str_format % args)
+    sys.stdout.flush()
 
 
 class ViberIcons(object):
@@ -107,7 +113,7 @@ class ViberIcons(object):
         if self.INSTANCE is not None:
             raise ValueError("An instantiation already exists!")
 
-        git = gtk.IconTheme()
+        git = gtk.icon_theme_get_default()
 
         ii_normal = git.lookup_icon('viber-normal', 24, 0)
         ii_notif = git.lookup_icon('viber-notification', 24, 0)
@@ -282,7 +288,17 @@ class XTools(object):
 class XWindow(object):
     """class description"""
 
+    class WindowIsNone(Exception):
+        """class description"""
+
+        def __init__(self):
+            super(XWindow.WindowIsNone, self).__init__("Window is None")
+
+
     def __init__(self, window):
+        if window is None:
+            raise XWindow.WindowIsNone
+
         self.XTools = XTools.Instance()
         self.window = window
 
@@ -446,28 +462,72 @@ class ViberWindow(XWindow):
                 self.viber_window = XTools.Instance().get_window_by_class_name('ViberPC')
 
 
+    @staticmethod
+    def get_viber_window():
+        children = XTools.Instance().get_root().query_tree().children
+
+        found_viber_window = None
+        for window in children:
+            try:
+                w_class = window.get_wm_class()
+                if w_class is not None:
+                    if "viber" in w_class[0].lower() or "viber" in w_class[1].lower():
+                        geom = window.get_geometry()._data
+                        if geom['x'] == 0 and geom['y'] == 0 and geom['width'] <= 64 and geom['height'] <= 64:
+                            found_viber_window = window
+            except:
+                pass
+
+        return found_viber_window
+
+
+    @staticmethod
+    def poll_viber_window():
+        found_viber_window = ViberWindow.get_viber_window()
+
+        poll_second_count = 10
+        while poll_second_count > 0:
+            if found_viber_window is not None:
+                break
+
+            time.sleep(1)
+            poll_second_count -= 1
+
+            found_viber_window = ViberWindow.get_viber_window()
+
+        return found_viber_window
+
+
     def __init__(self, close_chat=False):
         self.viber_window = None
+        self.viber_launcher = ViberLauncher()
 
         try:
-            self.w_compiz = XWindow(XTools.Instance().get_window_by_class_name('compiz'))
-        except XWindow.WindowIsNone:
-            raise CompizNotFound()
+            try:
+                self.w_compiz = XWindow(XTools.Instance().get_window_by_class_name('compiz'))
+            except XWindow.WindowIsNone:
+                raise CompizNotFound()
 
-        XTools.Instance().get_root().change_attributes(event_mask=X.SubstructureNotifyMask)
-        self.w_compiz.window.change_attributes(event_mask=X.SubstructureNotifyMask)
+            printf("Using NEW detection method\n")
 
-        self.thread = threading.Thread(target=self.find_viber)
-        self.thread.setDaemon(True)
-        self.thread.start()
+            XTools.Instance().get_root().change_attributes(event_mask=X.SubstructureNotifyMask)
+            self.w_compiz.window.change_attributes(event_mask=X.SubstructureNotifyMask)
 
+            self.thread = threading.Thread(target=self.find_viber)
+            self.thread.setDaemon(True)
+            self.thread.start()
 
-        self.viber_launcher = ViberLauncher()
-        self.viber_launcher.start()
+            self.viber_launcher.start()
 
-        self.thread.join()
+            self.thread.join()
 
-        super(ViberWindow, self).__init__(self.viber_window)
+            super(ViberWindow, self).__init__(self.viber_window)
+        except CompizNotFound:
+            printf("Using OLD detection method\n")
+
+            self.viber_launcher.start()
+
+            super(ViberWindow, self).__init__(ViberWindow.poll_viber_window())
 
         if self.window is None:
             raise NoViberWindowFound
