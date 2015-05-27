@@ -109,8 +109,8 @@ class ViberIcons(object):
 
         git = gtk.IconTheme()
 
-        ii_normal = git.lookup_icon('viber-normal', 24, 0).get_filename()
-        ii_notif = git.lookup_icon('viber-notification', 24, 0).get_filename()
+        ii_normal = git.lookup_icon('viber-normal', 24, 0)
+        ii_notif = git.lookup_icon('viber-notification', 24, 0)
 
         if ii_normal is not None and ii_notif is not None:
             self.icon_type = "SYSTEM"
