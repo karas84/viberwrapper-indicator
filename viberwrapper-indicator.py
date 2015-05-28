@@ -33,6 +33,40 @@ def printf(str_format, *args):
     sys.stdout.flush()
 
 
+class FilteredStdOut(object):
+    """class description"""
+
+    def __init__(self):
+        self.wrapped_stdout = sys.stdout
+        self.skip_next = False
+
+
+    def __getattribute__(self,name):
+        if name == "wrapped_stdout" or name == "write" or name == "filter" or name == "skip_next":
+            return object.__getattribute__(self, name)
+        else:
+            return self.wrapped_stdout.__class__.__getattribute__(self.wrapped_stdout, name)
+
+
+    def write(self, s):
+        if self.skip_next:
+            self.skip_next = False
+        elif self.filter(s):
+            self.wrapped_stdout.write(s)
+
+
+    def filter(self, s):
+        if "<class 'Xlib.protocol.request.QueryExtension'>" in s:
+            self.skip_next = True
+
+            return False
+        else:
+            return True
+
+
+sys.stdout = FilteredStdOut()
+
+
 class ViberIcons(object):
 
     ICON_NORMAL = """iVBORw0KGgoAAAANSUhEUgAAAGAAAABgCAYAAADimHc4AAAAGXRFWHRTb2Z0d2FyZQBBZG9iZSBJbWFnZVJlYWR5ccllPAAACzNJREFUeNrsXU1oFFccn12C1So0qbQk
@@ -109,16 +143,23 @@ class ViberIcons(object):
 
     INSTANCE = None
 
+
+    def icon_exists(self, icon_name, icon_size=24):
+        try:
+            icon_info = self.git.lookup_icon(icon_name, icon_size, 0)
+
+            return os.path.isfile(icon_info.get_filename())
+        except:
+            return False
+
+
     def __init__(self):
         if self.INSTANCE is not None:
             raise ValueError("An instantiation already exists!")
 
-        git = gtk.icon_theme_get_default()
+        self.git = gtk.icon_theme_get_default()
 
-        ii_normal = git.lookup_icon('viber-normal', 24, 0)
-        ii_notif = git.lookup_icon('viber-notification', 24, 0)
-
-        if ii_normal is not None and ii_notif is not None:
+        if self.icon_exists('viber-normal') and self.icon_exists('viber-notification'):
             self.icon_type = "SYSTEM"
 
             self.icon_normal = "viber-normal"
@@ -137,6 +178,8 @@ class ViberIcons(object):
 
             self.icon_normal = os.path.abspath(self.temp_icon_normal.name)
             self.icon_notification = os.path.abspath(self.temp_icon_notif.name)
+
+        printf("Using %s icons\n", self.icon_type)
 
 
 
@@ -392,10 +435,12 @@ class ViberIconPoller(threading.Thread):
 
             if n and not notified:
                 notified = True
-                ind.set_icon(icon_notif)
+                # ind.set_icon(icon_notif)
+                ind.set_status(appindicator.STATUS_ATTENTION)
             elif not n and notified:
                 notified = False
-                ind.set_icon(icon_norml)
+                # ind.set_icon(icon_norml)
+                ind.set_status(appindicator.STATUS_ACTIVE)
 
 
     def is_notified(self):
@@ -586,10 +631,20 @@ class ViberLauncher(threading.Thread):
 
 
     def run(self):
-        sp_viber = subprocess.Popen([self.viber_path], stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE)
-        sp_viber.wait()
+        try:
+            sp_viber = subprocess.Popen([self.viber_path], stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE)
+            sp_viber.wait()
 
-        gtk.main_quit()
+            printf("Viber process terminated. Quitting...")
+        except OSError as ose:
+            printf("Error starting Viber. Operating System reported: '%s'", ose.strerror)
+
+            os.system('pkill -9 Viber')
+            ViberIcons.Instance().clean_icons()
+            os._exit(-1)
+
+        try: gtk.main_quit()
+        except: pass
 
 
 if __name__ == "__main__":
@@ -604,6 +659,7 @@ if __name__ == "__main__":
         ind = appindicator.Indicator("Viber Indicator", "", appindicator.CATEGORY_APPLICATION_STATUS)
         ind.set_status(appindicator.STATUS_ACTIVE)
         ind.set_icon(icon_normal)
+        ind.set_attention_icon(icon_notification)
 
         menu = gtk.Menu()
 
@@ -640,9 +696,9 @@ if __name__ == "__main__":
 
         os.system('pkill -9 Viber')
         viber_icons.clean_icons()
-        sys.exit(-1)
+        os._exit(-1)
 
     finally:
 
         viber_icons.clean_icons()
-        sys.exit(0)
+        os._exit(0)
