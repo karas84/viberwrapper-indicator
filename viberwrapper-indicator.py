@@ -511,6 +511,16 @@ class ViberAlreadyRunning(Exception):
 class ViberWindow(XWindow):
     """class description"""
 
+    @staticmethod
+    def external_find_viber():
+        r = subprocess.Popen("xwininfo -root -children | grep -e '^.*Viber.*+0+0.*$' | sed 's/^ \\+\\(0x[^ ]\\+\\).*$/\\1/g'", stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+        ou,er = map(lambda s: s.strip(), r.communicate())
+
+        if len(ou) > 2 and len(er) == 0:
+            return XTools.Instance().create_window_from_id(int(ou, base=16))
+        else:
+            return None
+
 
     def find_viber(self):
         while self.viber_window is None:
@@ -538,8 +548,14 @@ class ViberWindow(XWindow):
 
 
     @staticmethod
-    def poll_viber_window():
-        found_viber_window = ViberWindow.get_viber_window()
+    def poll_viber_window(external=False):
+        if external:
+            printf("Using EXTERNAL detector\n")
+            finder_fn = ViberWindow.external_find_viber
+        else:
+            finder_fn = ViberWindow.get_viber_window
+
+        found_viber_window = finder_fn()
 
         poll_second_count = 10
         while poll_second_count > 0:
@@ -549,16 +565,19 @@ class ViberWindow(XWindow):
             time.sleep(1)
             poll_second_count -= 1
 
-            found_viber_window = ViberWindow.get_viber_window()
+            found_viber_window = finder_fn()
 
         return found_viber_window
 
 
-    def __init__(self, close_chat=False):
+    def __init__(self, close_chat=False, use_old=False, use_external=False):
         self.viber_window = None
         self.viber_launcher = ViberLauncher()
 
         try:
+            if use_old:
+                raise CompizNotFound()
+
             try:
                 self.w_compiz = XWindow(XTools.Instance().get_window_by_class_name('compiz'))
             except XWindow.WindowIsNone:
@@ -583,7 +602,8 @@ class ViberWindow(XWindow):
 
             self.viber_launcher.start()
 
-            super(ViberWindow, self).__init__(ViberWindow.poll_viber_window())
+            use_external_detection = use_old and use_external
+            super(ViberWindow, self).__init__(ViberWindow.poll_viber_window(external=use_external_detection))
 
         if self.window is None:
             raise NoViberWindowFound
@@ -663,9 +683,11 @@ if __name__ == "__main__":
     icon_normal, icon_notification = viber_icons.get_icons()
 
     try:
-        arg_close_chat = len(sys.argv) == 2 and sys.argv[1] == "--close-chat"
+        arg_close_chat = "--close-chat"               in sys.argv
+        arg_use_old    = "--use-old-detection-method" in sys.argv
+        arg_use_ext    = "--use-external-detector"    in sys.argv
 
-        viber_window = ViberWindow(close_chat=arg_close_chat)
+        viber_window = ViberWindow(close_chat=arg_close_chat, use_old=arg_use_old, use_external=arg_use_ext)
 
         ind = appindicator.Indicator("Viber Indicator", "", appindicator.CATEGORY_APPLICATION_STATUS)
         ind.set_status(appindicator.STATUS_ACTIVE)
@@ -703,7 +725,9 @@ if __name__ == "__main__":
         sys.stdout.write("Viber Already Running!\n")
         sys.stdout.flush()
 
-    except:
+    except Exception as e:
+
+        printf("Exiting because of exception '%s: %s'\n", e.__class__.__name__, e.args[0])
 
         os.system('pkill -9 Viber')
         viber_icons.clean_icons()
