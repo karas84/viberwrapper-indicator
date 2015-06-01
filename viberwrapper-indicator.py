@@ -23,6 +23,7 @@ import Xlib
 import Xlib.ext
 
 from Xlib import X, display, xobject
+from Xlib.error import BadWindow
 
 
 pygtk.require('2.0')
@@ -305,10 +306,15 @@ class XTools(object):
     def get_window_by_class_name(self, class_name):
         window = None
         for win in self.root.query_tree().children:
-            if win.get_wm_class() is not None:
-                if class_name in win.get_wm_class()[0] or class_name in win.get_wm_class()[1]:
-                    window = self.display.create_resource_object('window', win.id)
-                    break
+            try:
+                window_wm_class = win.get_wm_class()
+                if window_wm_class is not None:
+                    if class_name in window_wm_class[0] or class_name in window_wm_class[1]:
+                        window = self.display.create_resource_object('window', win.id)
+                        break
+            except BadWindow:
+                printf("Error getting WM_CLASS of window 0x%08x\n", win.id)
+                pass
 
         return window
 
