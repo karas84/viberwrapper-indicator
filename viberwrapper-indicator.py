@@ -671,16 +671,29 @@ class ViberLauncher(threading.Thread):
 
     def run(self):
         try:
-            sp_viber = subprocess.Popen([self.viber_path], stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE)
+            printf("Launching Viber (%s) ... ", self.viber_path)
+            p_viber = subprocess.Popen([self.viber_path], stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE)
+            printf("OK\n")
+
             sp_viber.wait()
 
             printf("Viber process terminated. Quitting...\n")
         except OSError as ose:
+
             printf("Error starting Viber. Operating System reported: '%s'\n", ose.strerror)
 
             os.system('pkill -9 Viber')
             ViberIcons.Instance().clean_icons()
             os._exit(-1)
+
+        except Exception as ex:
+
+            printf("Error starting Viber because of exception '%s: %s'\n", ex.__class__.__name__, ex.args[0])
+
+            os.system('pkill -9 Viber')
+            ViberIcons.Instance().clean_icons()
+            os._exit(-1)
+
 
         try: gtk.main_quit()
         except: pass
