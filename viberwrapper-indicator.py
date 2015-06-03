@@ -514,6 +514,7 @@ class ViberWindow(XWindow):
     @staticmethod
     def external_find_viber():
         r = subprocess.Popen(["xwininfo", "-root", "-children"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE)
+        r.wait()
         ou, er = map(lambda s: s.strip(), r.communicate())
 
         if len(ou) > 0 and len(er) == 0:
@@ -675,7 +676,7 @@ class ViberLauncher(threading.Thread):
             p_viber = subprocess.Popen([self.viber_path], stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE)
             printf("OK\n")
 
-            sp_viber.wait()
+            p_viber.wait()
 
             printf("Viber process terminated. Quitting...\n")
         except OSError as ose:
