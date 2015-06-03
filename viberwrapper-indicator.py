@@ -513,11 +513,21 @@ class ViberWindow(XWindow):
 
     @staticmethod
     def external_find_viber():
-        r = subprocess.Popen("xwininfo -root -children | grep -e '^.*Viber.*+0+0.*$' | sed 's/^ \\+\\(0x[^ ]\\+\\).*$/\\1/g'", stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
-        ou,er = map(lambda s: s.strip(), r.communicate())
+        r = subprocess.Popen(["xwininfo", "-root", "-children"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE)
+        ou, er = map(lambda s: s.strip(), r.communicate())
 
-        if len(ou) > 2 and len(er) == 0:
-            return XTools.Instance().create_window_from_id(int(ou, base=16))
+        if len(ou) > 0 and len(er) == 0:
+            ou = [i for i in ou.split('\n') if "ViberPC" in i and "+0+0" in i]
+
+            if len(ou) == 0:
+                return None
+
+            try:
+                viber_window_id = int(re.match(r"^ *(0x[^ ]+) .*$", ou[0]).groups()[0], base=16)
+            except:
+                return None
+
+            return XTools.Instance().create_window_from_id(viber_window_id)
         else:
             return None
 
@@ -547,12 +557,12 @@ class ViberWindow(XWindow):
         return found_viber_window
 
 
-    @staticmethod
-    def poll_viber_window(external=False):
+    def poll_viber_window(self, external=False):
         if external:
-            printf("Using EXTERNAL detector\n")
+            printf(" (EXTERNAL)\n")
             finder_fn = ViberWindow.external_find_viber
         else:
+            printf(" (INTERNAL)\n")
             finder_fn = ViberWindow.get_viber_window
 
         found_viber_window = finder_fn()
@@ -567,7 +577,7 @@ class ViberWindow(XWindow):
 
             found_viber_window = finder_fn()
 
-        return found_viber_window
+        self.viber_window = found_viber_window
 
 
     def __init__(self, close_chat=False, use_old=False, use_external=False):
@@ -589,21 +599,19 @@ class ViberWindow(XWindow):
             self.w_compiz.window.change_attributes(event_mask=X.SubstructureNotifyMask)
 
             self.thread = threading.Thread(target=self.find_viber)
-            self.thread.setDaemon(True)
-            self.thread.start()
-
-            self.viber_launcher.start()
-
-            self.thread.join()
-
-            super(ViberWindow, self).__init__(self.viber_window)
         except CompizNotFound:
-            printf("Using OLD detection method\n")
+            printf("Using OLD detection method")
 
-            self.viber_launcher.start()
+            self.thread = threading.Thread(target=self.poll_viber_window, kwargs={"external": use_old and use_external})
 
-            use_external_detection = use_old and use_external
-            super(ViberWindow, self).__init__(ViberWindow.poll_viber_window(external=use_external_detection))
+        self.thread.setDaemon(True)
+        self.thread.start()
+
+        self.viber_launcher.start()
+
+        self.thread.join()
+
+        super(ViberWindow, self).__init__(self.viber_window)
 
         if self.window is None:
             raise NoViberWindowFound
@@ -666,9 +674,9 @@ class ViberLauncher(threading.Thread):
             sp_viber = subprocess.Popen([self.viber_path], stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE)
             sp_viber.wait()
 
-            printf("Viber process terminated. Quitting...")
+            printf("Viber process terminated. Quitting...\n")
         except OSError as ose:
-            printf("Error starting Viber. Operating System reported: '%s'", ose.strerror)
+            printf("Error starting Viber. Operating System reported: '%s'\n", ose.strerror)
 
             os.system('pkill -9 Viber')
             ViberIcons.Instance().clean_icons()
