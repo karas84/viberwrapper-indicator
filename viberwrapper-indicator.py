@@ -639,17 +639,31 @@ class ProcessFinder(object):
         self.process_path = process_path.strip().replace('\t', ' ')
         self.re = re.compile(r".* " + re.escape(self.process_path) + r"$")
 
+        self._found = None
 
-    def find(self):
+
+    def _find_process(self):
+        self._found = False
+
         ret = subprocess.Popen(['ps', '-aux'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE)
         ret.wait()
         out_stream, err_stream = ret.communicate()
 
         for line in out_stream.split('\n'):
             if self.re.match(line):
-                return True
+                self._found = True
 
-        return False
+
+    def find(self):
+        finder_t = threading.Thread(target=self._find_process)
+        finder_t.setDaemon(True)
+        finder_t.start()
+        finder_t.join()
+
+        process_found = self._found
+        self._found = None
+
+        return process_found
 
 
 class ViberLauncher(threading.Thread):
