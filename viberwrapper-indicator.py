@@ -513,8 +513,7 @@ class ViberWindow(XWindow):
 
     @staticmethod
     def external_find_viber():
-        r = subprocess.Popen(["xwininfo", "-root", "-children"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE)
-        r.wait()
+        r = subprocess.Popen(["xwininfo", "-root", "-children"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         ou, er = map(lambda s: s.strip(), r.communicate())
 
         if len(ou) > 0 and len(er) == 0:
@@ -619,6 +618,8 @@ class ViberWindow(XWindow):
 
         self.move(-128, -128)
 
+        printf("Viber Found")
+
         if close_chat:
             self.chat_window = ViberChatWindow()
             self.chat_window.close()
@@ -645,8 +646,7 @@ class ProcessFinder(object):
     def _find_process(self):
         self._found = False
 
-        ret = subprocess.Popen(['ps', '-aux'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE)
-        ret.wait()
+        ret = subprocess.Popen(['ps', '-aux'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         out_stream, err_stream = ret.communicate()
 
         for line in out_stream.split('\n'):
@@ -687,7 +687,7 @@ class ViberLauncher(threading.Thread):
     def run(self):
         try:
             printf("Launching Viber (%s) ... ", self.viber_path)
-            p_viber = subprocess.Popen([self.viber_path], stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE)
+            p_viber = subprocess.Popen([self.viber_path], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             printf("OK\n")
 
             p_viber.wait()
